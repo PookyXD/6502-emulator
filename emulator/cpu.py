@@ -88,7 +88,155 @@ class CPU:
             },
             "cycles": self.cycles
         }
+    
+    def resolve_address(self, mode: str) -> int:
+        """
+        Given an addressing mode, fetch the operand bytes from memory
+        and return the effective address the instruction should use.
+        """
+        if mode == "IMM":
+            # Value is the next byte itself — return PC, then advance
+            addr = self.PC
+            self.PC = (self.PC + 1) & 0xFFFF
+            self.cycles += 1
+            return addr
+
+        elif mode == "ZP":
+            return self.fetch_byte()
+
+        elif mode == "ZP_X":
+            base = self.fetch_byte()
+            self.cycles += 1
+            return (base + self.X) & 0xFF   # Wraps within zero page
+
+        elif mode == "ZP_Y":
+            base = self.fetch_byte()
+            self.cycles += 1
+            return (base + self.Y) & 0xFF
+
+        elif mode == "ABS":
+            return self.fetch_word()
+
+        elif mode == "ABS_X":
+            base = self.fetch_word()
+            return (base + self.X) & 0xFFFF
+
+        elif mode == "ABS_Y":
+            base = self.fetch_word()
+            return (base + self.Y) & 0xFFFF
+
+        else:
+            raise ValueError(f"Unknown addressing mode: {mode}")
+        
+
+    def step(self) -> dict:
+        """
+        Execute one instruction and return the CPU state after it.
+        This is the fetch-decode-execute cycle.
+        """
+        from emulator.opcodes import OPCODES
+
+        # --- FETCH ---
+        opcode_byte = self.fetch_byte()
+
+        # --- DECODE ---
+        if opcode_byte not in OPCODES:
+            raise ValueError(f"Unknown opcode: {opcode_byte:#04x} at PC {self.PC - 1:#06x}")
+
+        mnemonic, mode, base_cycles = OPCODES[opcode_byte]
+        self.cycles += base_cycles - 1  # -1 because fetch_byte already added 1
+
+        # --- EXECUTE ---
+
+        # -- Loads --
+        if mnemonic == "LDA":
+            addr = self.resolve_address(mode)
+            self.A = self.memory.read(addr)
+            self.set_zn_flags(self.A)
+
+        elif mnemonic == "LDX":
+            addr = self.resolve_address(mode)
+            self.X = self.memory.read(addr)
+            self.set_zn_flags(self.X)
+
+        elif mnemonic == "LDY":
+            addr = self.resolve_address(mode)
+            self.Y = self.memory.read(addr)
+            self.set_zn_flags(self.Y)
+
+        # -- Stores --
+        elif mnemonic == "STA":
+            addr = self.resolve_address(mode)
+            self.memory.write(addr, self.A)
+
+        elif mnemonic == "STX":
+            addr = self.resolve_address(mode)
+            self.memory.write(addr, self.X)
+
+        elif mnemonic == "STY":
+            addr = self.resolve_address(mode)
+            self.memory.write(addr, self.Y)
+
+        # -- Register transfers --
+        elif mnemonic == "TAX":
+            self.X = self.A
+            self.set_zn_flags(self.X)
+
+        elif mnemonic == "TAY":
+            self.Y = self.A
+            self.set_zn_flags(self.Y)
+
+        elif mnemonic == "TXA":
+            self.A = self.X
+            self.set_zn_flags(self.A)
+
+        elif mnemonic == "TYA":
+            self.A = self.Y
+            self.set_zn_flags(self.A)
+
+        # -- Increment / Decrement --
+        elif mnemonic == "INX":
+            self.X = (self.X + 1) & 0xFF
+            self.set_zn_flags(self.X)
+
+        elif mnemonic == "INY":
+            self.Y = (self.Y + 1) & 0xFF
+            self.set_zn_flags(self.Y)
+
+        elif mnemonic == "DEX":
+            self.X = (self.X - 1) & 0xFF
+            self.set_zn_flags(self.X)
+
+        elif mnemonic == "DEY":
+            self.Y = (self.Y - 1) & 0xFF
+            self.set_zn_flags(self.Y)
+
+        # -- NOP / BRK --
+        elif mnemonic == "NOP":
+            pass  # Literally do nothing
+
+        elif mnemonic == "BRK":
+            self.B = 1  # Signal that we hit a break
+            return {**self.get_state(), "halted": True}
+
+        return {**self.get_state(), "halted": False}
+    
 
 if __name__ == "__main__":
+    
     cpu = CPU()
+
+    program = [0xA9, 0x05, 0xAA, 0xE8, 0x8D, 0x00, 0x02, 0x00]
+
+    cpu.memory.load(0x0600, program)
+
+    print("Initial state:")
     print(cpu.get_state())
+    print()
+
+    halted = False
+    while not halted:
+        state = cpu.step()
+        halted = state["halted"]
+        print(f"PC:{state['PC']:#06x}  A:{state['A']:#04x}  X:{state['X']:#04x}  Y:{state['Y']:#04x}  cycles:{state['cycles']}")
+        
