@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>6502 // デバッガー</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Share+Tech+Mono&family=Noto+Sans+JP:wght@300;400&family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <svg class="bg-circuit" id="bg-circuit" aria-hidden="true"></svg>
+  <div class="bg-vignette"></div>
+  <div class="bg-kanji">中央処理装置</div>
+
+  <div class="toast" id="toast"></div>
+
+  <div class="debugger">
+
+    <header class="topbar">
+      <div class="tb-title"><span class="sl">//</span> CPU-6502 デバッガー</div>
+      <div class="tb-sub">視覚デバッガー · MOS TECHNOLOGY</div>
+      <div class="tb-sep"></div>
+      <div class="tb-cycles">サイクル&nbsp;<span id="cy-val">00000000</span></div>
+      <div class="cpu-state idle" id="cpu-state">
+        <span class="cpu-state-dot"></span>
+        <span class="cpu-state-lbl" id="cpu-state-lbl">IDLE</span>
+      </div>
+      <div class="status-wrap">
+        <div class="status-dot off" id="sdot"></div>
+        <div class="status-lbl" id="slbl">OFFLINE</div>
+      </div>
+    </header>
+
+    <div class="main">
+
+      <!-- LEFT: REGISTERS + FLAGS + STACK -->
+      <div class="panel">
+
+        <div class="psec">
+          <div class="sec-hd">
+            <span class="sec-title"><span class="sl">//</span> REGISTERS</span>
+            <span class="sec-jp">レジスター</span>
+          </div>
+          <div class="reg-list">
+            <div class="reg-row r-pc pixel-border-crimson" id="row-PC">
+              <span class="reg-name">PC</span>
+              <span class="reg-val" id="rv-PC">$0600</span>
+            </div>
+            <div class="reg-row pixel-border" id="row-SP">
+              <span class="reg-name">SP</span>
+              <span class="reg-val" id="rv-SP">$FF</span>
+            </div>
+            <div class="reg-row pixel-border" id="row-A">
+              <span class="reg-name">A</span>
+              <span class="reg-val" id="rv-A">$00</span>
+            </div>
+            <div class="reg-row pixel-border" id="row-X">
+              <span class="reg-name">X</span>
+              <span class="reg-val" id="rv-X">$00</span>
+            </div>
+            <div class="reg-row pixel-border" id="row-Y">
+              <span class="reg-name">Y</span>
+              <span class="reg-val" id="rv-Y">$00</span>
+            </div>
+            <div class="reg-row pixel-border" id="row-P">
+              <span class="reg-name">P</span>
+              <span class="reg-val" id="rv-P">$04</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="psec">
+          <div class="sec-hd">
+            <span class="sec-title"><span class="sl">//</span> FLAGS</span>
+            <span class="sec-jp">フラグ</span>
+          </div>
+          <div class="flags-row">
+            <div class="flag-box pixel-border" id="fb-N"><span class="flag-lbl">N</span><span class="flag-bit">0</span></div>
+            <div class="flag-box pixel-border" id="fb-V"><span class="flag-lbl">V</span><span class="flag-bit">0</span></div>
+            <div class="flag-box pixel-border" id="fb-B"><span class="flag-lbl">B</span><span class="flag-bit">0</span></div>
+            <div class="flag-box pixel-border" id="fb-D"><span class="flag-lbl">D</span><span class="flag-bit">0</span></div>
+            <div class="flag-box pixel-border on" id="fb-I"><span class="flag-lbl">I</span><span class="flag-bit">1</span></div>
+            <div class="flag-box pixel-border" id="fb-Z"><span class="flag-lbl">Z</span><span class="flag-bit">0</span></div>
+            <div class="flag-box pixel-border" id="fb-C"><span class="flag-lbl">C</span><span class="flag-bit">0</span></div>
+          </div>
+        </div>
+
+        <div class="psec">
+          <div class="sec-hd">
+            <span class="sec-title"><span class="sl">//</span> STACK</span>
+            <span class="sec-jp">スタック · $0100</span>
+          </div>
+          <div class="stack-viz" id="stack-viz">
+            <div class="stack-row pixel-border active">
+              <span class="stack-addr">$01FF</span>
+              <span>▲ TOP</span>
+              <span class="stack-val">$00</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- CENTER: INSTRUCTION + MEMORY MAP + HEX VIEW -->
+      <div class="panel panel-center">
+
+        <div class="mem-map-bar" id="mem-map-bar" title="64K address space — crimson = PC, blue = loaded code"></div>
+        <div class="mem-map-labels">
+          <span>$0000</span>
+          <span>$FFFF</span>
+        </div>
+
+        <div class="cur-inst pixel-border-crimson" id="cur-inst">
+          <div class="ci-top">
+            <div class="ci-label">現在の命令 · CURRENT INSTRUCTION</div>
+            <div class="halt-badge" id="halt-badge" hidden>
+              <span class="halt-badge-icon">■</span> HALTED
+            </div>
+          </div>
+          <div class="ci-row">
+            <span class="ci-addr" id="ci-addr">$0600</span>
+            <span class="ci-mnem" id="ci-mnem">---</span>
+            <span class="ci-operand" id="ci-oper"></span>
+            <span class="ci-mode" id="ci-mode"></span>
+          </div>
+          <div class="ci-bytes" id="ci-bytes"></div>
+          <div class="disasm-strip" id="disasm-strip"></div>
+        </div>
+
+        <div class="mem-section">
+          <div class="mem-toolbar">
+            <div class="sec-hd" style="margin-bottom:0;border:none;padding:0;">
+              <span class="sec-title"><span class="sl">//</span> MEMORY</span>
+              <span class="sec-jp">メモリ · HEX VIEWER</span>
+            </div>
+            <div class="mem-jump">
+              <label for="mem-jump-input">GOTO</label>
+              <input type="text" id="mem-jump-input" placeholder="$0600" maxlength="6">
+              <button class="cbtn" id="mem-jump-btn" style="padding:5px 10px;font-size:0.75rem;"><span>GO</span></button>
+            </div>
+          </div>
+          <div class="mem-table" id="mem-grid"></div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT: CONTROLS + LOAD + LOG -->
+      <div class="panel panel-right">
+
+        <div class="ctrl-sec">
+          <div class="sec-hd">
+            <span class="sec-title"><span class="sl">//</span> CONTROL</span>
+            <span class="sec-jp">制御</span>
+          </div>
+          <div class="btn-grid">
+            <button class="cbtn step-btn" data-action="step" id="btn-step"><span>▶ STEP</span></button>
+            <button class="cbtn" data-action="run" id="btn-run"><span>RUN</span></button>
+            <button class="cbtn" data-action="reset" id="btn-reset"><span>RESET</span></button>
+          </div>
+          <div class="kbd-hints">
+            <span class="kbd-hint"><kbd>Space</kbd> step</span>
+            <span class="kbd-hint"><kbd>G</kbd> run</span>
+            <span class="kbd-hint"><kbd>R</kbd> reset</span>
+            <span class="kbd-hint"><kbd>L</kbd> load</span>
+          </div>
+          <div class="halt-hint" id="halt-hint" hidden>Program halted — press RESET or load new code to continue</div>
+        </div>
+
+        <div class="load-sec">
+          <div class="sec-hd">
+            <span class="sec-title"><span class="sl">//</span> LOAD</span>
+            <span class="sec-jp">プログラム入力</span>
+          </div>
+          <div class="load-field">
+            <div class="load-field-header">
+              <span class="load-prompt">&gt; hex@$0600</span>
+              <span class="load-prompt-label">paste machine code here</span>
+              <span class="load-byte-count" id="load-byte-count">0 bytes</span>
+            </div>
+            <textarea
+              class="load-ta"
+              id="load-ta"
+              spellcheck="false"
+              placeholder="A9 05    ; LDA #$05&#10;AA       ; TAX&#10;E8       ; INX&#10;&#10;type hex bytes separated by spaces…"
+            ></textarea>
+          </div>
+          <div class="load-footer">
+            <span class="load-hint">loads at $0600 · space or comma separated</span>
+            <button class="load-sample" id="load-sample">sample</button>
+          </div>
+          <div class="load-error" id="load-error"></div>
+          <button class="cbtn load-btn" data-action="load"><span>▶ LOAD PROGRAM</span></button>
+        </div>
+
+        <div class="log-sec">
+          <div class="sec-hd log-sec-hd">
+            <span class="sec-title"><span class="sl">//</span> LOG</span>
+            <span class="sec-jp">実行ログ</span>
+            <button class="log-clear" id="log-clear" title="Clear log">CLR</button>
+          </div>
+          <div id="exec-log">
+            <div class="log-empty">Step or run a program to see execution history</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="statusbar">
+      <div class="statusbar-item">CONN <span class="val" id="sb-conn">OFFLINE</span></div>
+      <div class="statusbar-item">PC <span class="val" id="sb-pc">$0600</span></div>
+      <div class="statusbar-item">CYC <span class="val" id="sb-cycles">0</span></div>
+      <div class="statusbar-item">CPU <span class="val" id="sb-cpu">IDLE</span></div>
+      <div class="statusbar-item">STEPS <span class="val" id="sb-steps">0</span></div>
+      <div class="statusbar-sep"></div>
+      <div class="statusbar-item">6502 Visual Debugger · ws://127.0.0.1:8000</div>
+    </footer>
+
+  </div>
+
+  <script src="debugger.js"></script>
+</body>
+</html>

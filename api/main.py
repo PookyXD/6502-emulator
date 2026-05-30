@@ -2,9 +2,11 @@
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from emulator.cpu import CPU
 from api.ws_manager import manager
+from pathlib import Path
 
 app = FastAPI(title="6502 Emulator API")
 
@@ -157,3 +159,8 @@ async def websocket_endpoint(websocket: WebSocket):
 
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+
+
+_frontend = Path(__file__).resolve().parent.parent / "frontend"
+if _frontend.is_dir():
+    app.mount("/", StaticFiles(directory=str(_frontend), html=True), name="frontend")
